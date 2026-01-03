@@ -1,5 +1,6 @@
 package com.spendinganalytics.service;
 
+import com.spendinganalytics.dto.DashboardKPIsDTO;
 import com.spendinganalytics.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,9 +18,7 @@ public class DashboardService {
     
     private final TransactionRepository transactionRepository;
     
-    public Map<String, Object> getDashboardKPIs(String period) {
-        Map<String, Object> kpis = new HashMap<>();
-        
+    public DashboardKPIsDTO getDashboardKPIs(String period) {
         LocalDate today = LocalDate.now();
         
         // Always use current month for "this period"
@@ -34,21 +33,19 @@ public class DashboardService {
         // Query already returns ABS(amount) and filters amount < 0, so result is positive
         BigDecimal currentSpending = transactionRepository.getTotalSpendingBetween(currentMonthStart, currentMonthEnd);
         if (currentSpending == null) currentSpending = BigDecimal.ZERO;
-        kpis.put("totalSpent", currentSpending);
+        currentSpending = currentSpending.setScale(2, RoundingMode.HALF_UP);
         
         // Total spending previous month
         BigDecimal previousSpending = transactionRepository.getTotalSpendingBetween(previousMonthStart, previousMonthEnd);
         if (previousSpending == null) previousSpending = BigDecimal.ZERO;
-        kpis.put("previousPeriodSpent", previousSpending);
+        previousSpending = previousSpending.setScale(2, RoundingMode.HALF_UP);
         
         // Calculate change percentage
+        BigDecimal changePercent = BigDecimal.ZERO;
         if (previousSpending.compareTo(BigDecimal.ZERO) != 0) {
-            BigDecimal change = currentSpending.subtract(previousSpending)
+            changePercent = currentSpending.subtract(previousSpending)
                     .divide(previousSpending, 2, RoundingMode.HALF_UP)
                     .multiply(BigDecimal.valueOf(100));
-            kpis.put("changePercent", change);
-        } else {
-            kpis.put("changePercent", BigDecimal.ZERO);
         }
         
         // Average per day (current month so far)
@@ -56,18 +53,16 @@ public class DashboardService {
         BigDecimal avgPerDay = daysPassed > 0 
             ? currentSpending.divide(BigDecimal.valueOf(daysPassed), 2, RoundingMode.HALF_UP)
             : BigDecimal.ZERO;
-        kpis.put("avgPerDay", avgPerDay);
         
         // Projected month-end: based on average spending per day so far
         int daysInMonth = today.lengthOfMonth();
         BigDecimal projectedMonthEnd = avgPerDay.multiply(BigDecimal.valueOf(daysInMonth)).setScale(2, RoundingMode.HALF_UP);
-        kpis.put("projectedMonthEnd", projectedMonthEnd.doubleValue());
         
         // Category breakdown (current month)
         List<Object[]> categoryData = transactionRepository.getSpendingByCategory(currentMonthStart, currentMonthEnd);
         Map<String, Double> categories = new HashMap<>();
         String topCategory = null;
-        double topCategoryAmount = 0;
+        Double topCategoryAmount = 0.0;
         
         for (Object[] data : categoryData) {
             String category = data[0] != null ? (String) data[0] : "Uncategorized";
@@ -80,11 +75,16 @@ public class DashboardService {
             }
         }
         
-        kpis.put("categories", categories);
-        kpis.put("topCategory", topCategory);
-        kpis.put("topCategoryAmount", topCategoryAmount);
-        
-        return kpis;
+        return new DashboardKPIsDTO(
+            currentSpending,
+            previousSpending,
+            changePercent,
+            avgPerDay,
+            projectedMonthEnd,
+            categories,
+            topCategory,
+            topCategoryAmount
+        );
     }
 }
 
