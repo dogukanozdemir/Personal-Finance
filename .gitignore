@@ -1,0 +1,28 @@
+# Data directory (local storage, not used with volumes)
+data/
+
+# Converted files
+*_converted.xlsx
+convert_excel.py
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Backups
+*.db.backup
+*_backup_*.db
+
