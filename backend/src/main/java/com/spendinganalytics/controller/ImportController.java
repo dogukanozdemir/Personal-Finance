@@ -34,6 +34,18 @@ public class ImportController {
         }
     }
     
+    @PostMapping("/upload-multiple")
+    public ResponseEntity<?> uploadMultipleFiles(
+            @RequestParam("files") MultipartFile[] files,
+            @RequestParam(value = "accountId", required = false) Long accountId) {
+        try {
+            ImportResult result = importService.importMultipleFiles(files, accountId);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error importing files: " + e.getMessage());
+        }
+    }
+    
     @GetMapping("/accounts")
     public ResponseEntity<List<Account>> getAccounts() {
         return ResponseEntity.ok(accountRepository.findAll());

@@ -35,6 +35,41 @@ export const importAPI = {
       },
     });
   },
+  uploadFiles: async (
+    files: File[], 
+    onProgress?: (filename: string, status: 'pending' | 'processing' | 'success' | 'error') => void
+  ) => {
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+    
+    // Update status for each file
+    if (onProgress) {
+      files.forEach(file => onProgress(file.name, 'processing'));
+    }
+    
+    try {
+      const response = await api.post('/import/upload-multiple', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      // Mark all as success
+      if (onProgress) {
+        files.forEach(file => onProgress(file.name, 'success'));
+      }
+      
+      return response;
+    } catch (error) {
+      // Mark all as error
+      if (onProgress) {
+        files.forEach(file => onProgress(file.name, 'error'));
+      }
+      throw error;
+    }
+  },
   getAccounts: () => api.get('/import/accounts'),
   createAccount: (data: any) => api.post('/import/accounts', data),
 };

@@ -129,6 +129,70 @@ public class ImportService {
         return result;
     }
     
+    @Transactional
+    public ImportResult importMultipleFiles(MultipartFile[] files, Long accountId) throws Exception {
+        logger.info("Starting batch import for {} files", files.length);
+        
+        ImportResult aggregatedResult = new ImportResult();
+        aggregatedResult.setTotalRows(0);
+        aggregatedResult.setNewTransactions(0);
+        aggregatedResult.setDuplicates(0);
+        
+        LocalDate overallMinDate = null;
+        LocalDate overallMaxDate = null;
+        
+        for (MultipartFile file : files) {
+            logger.info("Processing file: {}", file.getOriginalFilename());
+            
+            try {
+                ImportResult fileResult = importFile(file, accountId);
+                
+                // Aggregate results
+                aggregatedResult.setTotalRows(
+                    aggregatedResult.getTotalRows() + fileResult.getTotalRows()
+                );
+                aggregatedResult.setNewTransactions(
+                    aggregatedResult.getNewTransactions() + fileResult.getNewTransactions()
+                );
+                aggregatedResult.setDuplicates(
+                    aggregatedResult.getDuplicates() + fileResult.getDuplicates()
+                );
+                
+                // Update date range
+                if (fileResult.getDateRangeStart() != null && !fileResult.getDateRangeStart().isEmpty()) {
+                    LocalDate fileMinDate = LocalDate.parse(fileResult.getDateRangeStart());
+                    if (overallMinDate == null || fileMinDate.isBefore(overallMinDate)) {
+                        overallMinDate = fileMinDate;
+                    }
+                }
+                
+                if (fileResult.getDateRangeEnd() != null && !fileResult.getDateRangeEnd().isEmpty()) {
+                    LocalDate fileMaxDate = LocalDate.parse(fileResult.getDateRangeEnd());
+                    if (overallMaxDate == null || fileMaxDate.isAfter(overallMaxDate)) {
+                        overallMaxDate = fileMaxDate;
+                    }
+                }
+                
+                // Use first file's account name
+                if (aggregatedResult.getAccountName() == null) {
+                    aggregatedResult.setAccountName(fileResult.getAccountName());
+                }
+                
+            } catch (Exception e) {
+                logger.error("Error processing file {}: {}", file.getOriginalFilename(), e.getMessage());
+                // Continue processing other files even if one fails
+            }
+        }
+        
+        aggregatedResult.setDateRangeStart(overallMinDate != null ? overallMinDate.toString() : "");
+        aggregatedResult.setDateRangeEnd(overallMaxDate != null ? overallMaxDate.toString() : "");
+        
+        logger.info("Batch import completed: {} files processed, {} new transactions, {} duplicates", 
+                files.length, aggregatedResult.getNewTransactions(), aggregatedResult.getDuplicates());
+        
+        return aggregatedResult;
+    }
+    
     private String generateDedupHash(Long accountId, LocalDate date, String merchant, 
                                       Double amount, String transactionId) {
         StringBuilder sb = new StringBuilder();

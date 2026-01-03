@@ -1,32 +1,43 @@
 import { useState } from 'react';
-import { Upload, CheckCircle, XCircle } from 'lucide-react';
+import { Upload, CheckCircle, XCircle, FileText, Loader } from 'lucide-react';
 import { importAPI } from '../utils/api';
 
 const Import = () => {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<{[key: string]: 'pending' | 'processing' | 'success' | 'error'}>({});
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      const fileList = Array.from(e.target.files);
+      setFiles(fileList);
       setResult(null);
       setError(null);
+      
+      // Initialize status for all files
+      const status: {[key: string]: 'pending' | 'processing' | 'success' | 'error'} = {};
+      fileList.forEach(file => {
+        status[file.name] = 'pending';
+      });
+      setProcessingStatus(status);
     }
   };
   
   const handleUpload = async () => {
-    if (!file) return;
+    if (files.length === 0) return;
     
     setLoading(true);
     setError(null);
     
     try {
-      const response = await importAPI.uploadFile(file);
+      const response = await importAPI.uploadFiles(files, (filename, status) => {
+        setProcessingStatus(prev => ({...prev, [filename]: status}));
+      });
       setResult(response.data);
     } catch (err: any) {
-      setError(err.response?.data || 'Failed to import file');
+      setError(err.response?.data || 'Failed to import files');
     } finally {
       setLoading(false);
     }
@@ -41,32 +52,76 @@ const Import = () => {
         <div className="border-2 border-dashed border-gray-700 rounded-lg p-12 text-center hover:border-primary transition-colors">
           <Upload size={48} className="mx-auto mb-4 text-text-muted" />
           <h3 className="text-lg font-semibold mb-2">
-            {file ? file.name : 'Upload Bank Statement'}
+            {files.length > 0 ? `${files.length} file${files.length > 1 ? 's' : ''} selected` : 'Upload Bank Statements'}
           </h3>
           <p className="text-text-muted mb-4">
-            Supports Excel (.xlsx) and CSV files
+            Supports Excel (.xlsx, .xls) - Select multiple files for batch import
           </p>
           <input
             type="file"
-            accept=".xlsx,.xls,.csv"
+            accept=".xlsx,.xls"
             onChange={handleFileChange}
             className="hidden"
             id="file-upload"
+            multiple
           />
           <label htmlFor="file-upload" className="btn-primary inline-block cursor-pointer">
-            {file ? 'Change File' : 'Select File'}
+            {files.length > 0 ? 'Change Files' : 'Select Files'}
           </label>
         </div>
         
-        {file && (
-          <div className="mt-6 flex justify-center">
-            <button
-              onClick={handleUpload}
-              disabled={loading}
-              className="btn-primary"
-            >
-              {loading ? 'Importing...' : 'Import Transactions'}
-            </button>
+        {/* File List */}
+        {files.length > 0 && (
+          <div className="mt-6">
+            <h4 className="text-sm font-semibold mb-3 text-text-muted">Selected Files:</h4>
+            <div className="space-y-2">
+              {files.map((file, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-background rounded-lg border border-gray-700">
+                  <div className="flex items-center space-x-3">
+                    <FileText size={20} className="text-primary" />
+                    <div>
+                      <p className="text-sm font-medium">{file.name}</p>
+                      <p className="text-xs text-text-muted">{(file.size / 1024).toFixed(2)} KB</p>
+                    </div>
+                  </div>
+                  {processingStatus[file.name] && (
+                    <div className="flex items-center space-x-2">
+                      {processingStatus[file.name] === 'pending' && (
+                        <span className="text-xs text-text-muted">Pending</span>
+                      )}
+                      {processingStatus[file.name] === 'processing' && (
+                        <>
+                          <Loader size={16} className="animate-spin text-primary" />
+                          <span className="text-xs text-primary">Processing...</span>
+                        </>
+                      )}
+                      {processingStatus[file.name] === 'success' && (
+                        <>
+                          <CheckCircle size={16} className="text-success" />
+                          <span className="text-xs text-success">Done</span>
+                        </>
+                      )}
+                      {processingStatus[file.name] === 'error' && (
+                        <>
+                          <XCircle size={16} className="text-danger" />
+                          <span className="text-xs text-danger">Failed</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-6 flex justify-center">
+              <button
+                onClick={handleUpload}
+                disabled={loading}
+                className="btn-primary"
+              >
+                {loading ? 'Importing...' : `Import ${files.length} File${files.length > 1 ? 's' : ''}`}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -123,12 +178,29 @@ const Import = () => {
       <div className="card">
         <h3 className="text-xl font-semibold mb-4">How to Import</h3>
         <ol className="space-y-2 list-decimal list-inside text-text-muted">
-          <li>Download your bank statement from your online banking portal</li>
-          <li>Make sure it's in Excel (.xlsx) or CSV format</li>
-          <li>Upload the file using the button above</li>
-          <li>The system will automatically detect duplicates and import only new transactions</li>
-          <li>You can re-upload the same file multiple times - duplicates will be skipped</li>
+          <li>Download your bank statements from your online banking portal</li>
+          <li>Make sure they're in Excel format (.xlsx or .xls)</li>
+          <li><strong>Select multiple files</strong> - you can upload both debit and credit card statements at once</li>
+          <li>The system will automatically:
+            <ul className="ml-6 mt-1 space-y-1 list-disc">
+              <li>Detect file format (Garanti Debit or Credit Card)</li>
+              <li>Skip duplicate transactions across all files</li>
+              <li>Import only new transactions</li>
+            </ul>
+          </li>
+          <li>You can re-upload the same files multiple times - duplicates will always be skipped</li>
         </ol>
+        
+        <div className="mt-4 p-4 bg-primary/10 border border-primary/30 rounded-lg">
+          <h4 className="text-sm font-semibold mb-2 flex items-center">
+            <CheckCircle size={16} className="mr-2 text-success" />
+            Supported Formats
+          </h4>
+          <ul className="text-sm text-text-muted space-y-1 ml-6 list-disc">
+            <li>Garanti Bank Debit Account Statements (.xlsx, .xls)</li>
+            <li>Garanti Bank Credit Card Statements (.xlsx, .xls)</li>
+          </ul>
+        </div>
       </div>
     </div>
   );
