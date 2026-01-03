@@ -63,7 +63,7 @@ const Import = () => {
             onChange={handleFileChange}
             className="hidden"
             id="file-upload"
-            multiple
+            multiple={true}
           />
           <label htmlFor="file-upload" className="btn-primary inline-block cursor-pointer">
             {files.length > 0 ? 'Change Files' : 'Select Files'}
