@@ -71,7 +71,21 @@ public class ExcelParser {
             } else if ("credit".equals(accountType)) {
                 transactions = parseCreditAccount(sheet);
             } else {
-                throw new Exception("Unable to detect account type (Garanti Debit or Credit)");
+                // Try to parse as debit first, then credit if that fails
+                logger.warn("Account type unknown, attempting to parse as debit first...");
+                transactions = parseDebitAccount(sheet);
+                
+                if (transactions.isEmpty()) {
+                    logger.warn("Debit parsing returned empty, trying credit...");
+                    transactions = parseCreditAccount(sheet);
+                }
+                
+                if (transactions.isEmpty()) {
+                    throw new Exception("Unable to detect account type (Garanti Debit or Credit). " +
+                            "Please ensure the file is a valid Garanti Bank statement with headers like 'Tarih', 'Açıklama/İşlem', 'Tutar'.");
+                }
+                
+                logger.info("Successfully parsed {} transactions despite unknown account type", transactions.size());
             }
             
             workbook.close();
@@ -90,22 +104,79 @@ public class ExcelParser {
     }
     
     private static String detectAccountType(Sheet sheet) {
-        // Scan first 15 rows to find header
-        for (int i = 0; i < Math.min(15, sheet.getLastRowNum()); i++) {
+        logger.info("Detecting account type, scanning up to row {}", Math.min(20, sheet.getLastRowNum() + 1));
+        
+        // Collect all cell values for debugging
+        List<String> foundValues = new ArrayList<>();
+        
+        // Scan first 20 rows to find header (increased from 15)
+        for (int i = 0; i < Math.min(20, sheet.getLastRowNum() + 1); i++) {
             Row row = sheet.getRow(i);
             if (row == null) continue;
             
             for (Cell cell : row) {
                 String value = getCellValueAsString(cell);
-                if (value != null) {
-                    if (value.contains("Dekont No") || value.contains("IBAN")) {
+                if (value != null && !value.trim().isEmpty()) {
+                    String lowerValue = value.toLowerCase().trim();
+                    foundValues.add(value);
+                    
+                    // Debit indicators (case-insensitive, partial matches)
+                    if (lowerValue.contains("dekont") || 
+                        lowerValue.contains("iban") ||
+                        lowerValue.contains("bakiye") ||
+                        (lowerValue.contains("açıklama") && lowerValue.contains("tutar"))) {
+                        logger.info("Detected DEBIT account type based on: {}", value);
                         return "debit";
-                    } else if (value.contains("Bonus") && value.contains("Tutar")) {
+                    }
+                    
+                    // Credit indicators (case-insensitive, partial matches)
+                    if (lowerValue.contains("bonus") || 
+                        (lowerValue.contains("işlem") && lowerValue.contains("tutar")) ||
+                        lowerValue.contains("tutar(tl)")) {
+                        logger.info("Detected CREDIT account type based on: {}", value);
                         return "credit";
                     }
                 }
             }
         }
+        
+        // If we found a "Tarih" header, try to detect by column structure
+        for (int i = 0; i < Math.min(20, sheet.getLastRowNum() + 1); i++) {
+            Row row = sheet.getRow(i);
+            if (row == null) continue;
+            
+            boolean hasTarih = false;
+            boolean hasDekont = false;
+            boolean hasBonus = false;
+            boolean hasBakiye = false;
+            boolean hasIslem = false;
+            
+            for (Cell cell : row) {
+                String value = getCellValueAsString(cell);
+                if (value != null) {
+                    String lowerValue = value.toLowerCase().trim();
+                    if (lowerValue.contains("tarih")) hasTarih = true;
+                    if (lowerValue.contains("dekont")) hasDekont = true;
+                    if (lowerValue.contains("bonus")) hasBonus = true;
+                    if (lowerValue.contains("bakiye")) hasBakiye = true;
+                    if (lowerValue.contains("işlem")) hasIslem = true;
+                }
+            }
+            
+            if (hasTarih) {
+                if (hasDekont || hasBakiye) {
+                    logger.info("Detected DEBIT account type by header structure (Tarih + Dekont/Bakiye)");
+                    return "debit";
+                }
+                if (hasBonus || (hasIslem && !hasBakiye)) {
+                    logger.info("Detected CREDIT account type by header structure (Tarih + Bonus/İşlem)");
+                    return "credit";
+                }
+            }
+        }
+        
+        logger.warn("Could not detect account type. Found values in first rows: {}", 
+                foundValues.size() > 10 ? foundValues.subList(0, 10) : foundValues);
         return "unknown";
     }
     
@@ -114,15 +185,19 @@ public class ExcelParser {
         
         // Find header row (contains "Tarih", "Açıklama", "Tutar", etc.)
         int headerRow = -1;
-        for (int i = 0; i < Math.min(15, sheet.getLastRowNum() + 1); i++) {
+        for (int i = 0; i < Math.min(20, sheet.getLastRowNum() + 1); i++) {
             Row row = sheet.getRow(i);
             if (row == null) continue;
             
-            String firstCell = getCellValueAsString(row.getCell(0));
-            if (firstCell != null && firstCell.equals("Tarih")) {
-                headerRow = i;
-                break;
+            // Check if this row contains "Tarih" (case-insensitive)
+            for (Cell cell : row) {
+                String cellValue = getCellValueAsString(cell);
+                if (cellValue != null && cellValue.toLowerCase().trim().equals("tarih")) {
+                    headerRow = i;
+                    break;
+                }
             }
+            if (headerRow != -1) break;
         }
         
         if (headerRow == -1) {
@@ -154,25 +229,40 @@ public class ExcelParser {
                 transaction.date = parseDateCell(dateCell);
                 if (transaction.date == null) continue;
                 
-                // Merchant (Açıklama)
-                Cell merchantCell = row.getCell(columnMap.getOrDefault("Açıklama", 1));
+                // Merchant (Açıklama) - try multiple column name variations
+                Integer merchantCol = columnMap.get("Açıklama");
+                if (merchantCol == null) merchantCol = columnMap.get("açıklama");
+                if (merchantCol == null) merchantCol = 1; // fallback
+                Cell merchantCell = row.getCell(merchantCol);
                 transaction.merchant = getCellValueAsString(merchantCell);
                 if (transaction.merchant == null || transaction.merchant.trim().isEmpty()) continue;
                 
                 // Category (Etiket)
-                Cell categoryCell = row.getCell(columnMap.getOrDefault("Etiket", 2));
+                Integer categoryCol = columnMap.get("Etiket");
+                if (categoryCol == null) categoryCol = columnMap.get("etiket");
+                if (categoryCol == null) categoryCol = 2; // fallback
+                Cell categoryCell = row.getCell(categoryCol);
                 transaction.category = getCellValueAsString(categoryCell);
                 
                 // Amount (Tutar)
-                Cell amountCell = row.getCell(columnMap.getOrDefault("Tutar", 3));
+                Integer amountCol = columnMap.get("Tutar");
+                if (amountCol == null) amountCol = columnMap.get("tutar");
+                if (amountCol == null) amountCol = 3; // fallback
+                Cell amountCell = row.getCell(amountCol);
                 transaction.amount = parseNumericCell(amountCell);
                 
                 // Balance (Bakiye)
-                Cell balanceCell = row.getCell(columnMap.getOrDefault("Bakiye", 4));
+                Integer balanceCol = columnMap.get("Bakiye");
+                if (balanceCol == null) balanceCol = columnMap.get("bakiye");
+                if (balanceCol == null) balanceCol = 4; // fallback
+                Cell balanceCell = row.getCell(balanceCol);
                 transaction.balance = parseNumericCell(balanceCell);
                 
                 // Transaction ID (Dekont No)
-                Cell transactionIdCell = row.getCell(columnMap.getOrDefault("Dekont No", 5));
+                Integer transactionIdCol = columnMap.get("Dekont No");
+                if (transactionIdCol == null) transactionIdCol = columnMap.get("dekont no");
+                if (transactionIdCol == null) transactionIdCol = 5; // fallback
+                Cell transactionIdCell = row.getCell(transactionIdCol);
                 transaction.transactionId = getCellValueAsString(transactionIdCell);
                 
                 transactions.add(transaction);
@@ -189,15 +279,19 @@ public class ExcelParser {
         
         // Find header row (contains "Tarih", "İşlem", "Tutar(TL)", etc.)
         int headerRow = -1;
-        for (int i = 0; i < Math.min(10, sheet.getLastRowNum() + 1); i++) {
+        for (int i = 0; i < Math.min(20, sheet.getLastRowNum() + 1); i++) {
             Row row = sheet.getRow(i);
             if (row == null) continue;
             
-            String firstCell = getCellValueAsString(row.getCell(0));
-            if (firstCell != null && firstCell.equals("Tarih")) {
-                headerRow = i;
-                break;
+            // Check if this row contains "Tarih" (case-insensitive)
+            for (Cell cell : row) {
+                String cellValue = getCellValueAsString(cell);
+                if (cellValue != null && cellValue.toLowerCase().trim().equals("tarih")) {
+                    headerRow = i;
+                    break;
+                }
             }
+            if (headerRow != -1) break;
         }
         
         if (headerRow == -1) {
@@ -205,13 +299,16 @@ public class ExcelParser {
             return transactions;
         }
         
-        // Parse header to get column indices
+        // Parse header to get column indices (case-insensitive matching)
         Row header = sheet.getRow(headerRow);
         Map<String, Integer> columnMap = new HashMap<>();
         for (Cell cell : header) {
             String value = getCellValueAsString(cell);
             if (value != null) {
-                columnMap.put(value, cell.getColumnIndex());
+                String normalized = value.trim();
+                columnMap.put(normalized, cell.getColumnIndex());
+                // Also store lowercase version for flexible matching
+                columnMap.put(normalized.toLowerCase(), cell.getColumnIndex());
             }
         }
         
@@ -225,25 +322,42 @@ public class ExcelParser {
                 transaction.accountType = "credit";
                 
                 // Date
-                Cell dateCell = row.getCell(columnMap.getOrDefault("Tarih", 0));
+                Integer dateCol = columnMap.get("Tarih");
+                if (dateCol == null) dateCol = columnMap.get("tarih");
+                if (dateCol == null) dateCol = 0; // fallback
+                Cell dateCell = row.getCell(dateCol);
                 transaction.date = parseDateCell(dateCell);
                 if (transaction.date == null) continue;
                 
                 // Merchant (İşlem)
-                Cell merchantCell = row.getCell(columnMap.getOrDefault("İşlem", 1));
+                Integer merchantCol = columnMap.get("İşlem");
+                if (merchantCol == null) merchantCol = columnMap.get("işlem");
+                if (merchantCol == null) merchantCol = 1; // fallback
+                Cell merchantCell = row.getCell(merchantCol);
                 transaction.merchant = getCellValueAsString(merchantCell);
                 if (transaction.merchant == null || transaction.merchant.trim().isEmpty()) continue;
                 
                 // Category (Etiket)
-                Cell categoryCell = row.getCell(columnMap.getOrDefault("Etiket", 2));
+                Integer categoryCol = columnMap.get("Etiket");
+                if (categoryCol == null) categoryCol = columnMap.get("etiket");
+                if (categoryCol == null) categoryCol = 2; // fallback
+                Cell categoryCell = row.getCell(categoryCol);
                 transaction.category = getCellValueAsString(categoryCell);
                 
                 // Bonus
-                Cell bonusCell = row.getCell(columnMap.getOrDefault("Bonus", 3));
+                Integer bonusCol = columnMap.get("Bonus");
+                if (bonusCol == null) bonusCol = columnMap.get("bonus");
+                if (bonusCol == null) bonusCol = 3; // fallback
+                Cell bonusCell = row.getCell(bonusCol);
                 transaction.bonusPoints = parseNumericCell(bonusCell);
                 
-                // Amount (Tutar(TL))
-                Cell amountCell = row.getCell(columnMap.getOrDefault("Tutar(TL)", 4));
+                // Amount (Tutar(TL)) - try variations
+                Integer amountCol = columnMap.get("Tutar(TL)");
+                if (amountCol == null) amountCol = columnMap.get("tutar(tl)");
+                if (amountCol == null) amountCol = columnMap.get("Tutar");
+                if (amountCol == null) amountCol = columnMap.get("tutar");
+                if (amountCol == null) amountCol = 4; // fallback
+                Cell amountCell = row.getCell(amountCol);
                 transaction.amount = parseNumericCell(amountCell);
                 
                 transactions.add(transaction);
