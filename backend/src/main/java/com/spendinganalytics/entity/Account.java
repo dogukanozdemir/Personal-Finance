@@ -1,4 +1,4 @@
-package com.spendinganalytics.model;
+package com.spendinganalytics.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -8,24 +8,29 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "rules")
+@Table(name = "accounts")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Rule {
+public class Account {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @Column(name = "merchant_pattern", nullable = false)
-    private String merchantPattern;
+    @Column(nullable = false)
+    private String name;
     
     @Column(nullable = false)
-    private String category;
+    private String type; // 'debit' or 'credit'
     
-    @Column(name = "is_subscription")
-    private Boolean isSubscription = false;
+    @Column(name = "account_number")
+    private String accountNumber;
+    
+    private String iban;
+    
+    @Column(nullable = false)
+    private String currency = "TRY";
     
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();

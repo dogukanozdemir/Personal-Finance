@@ -1,4 +1,4 @@
-package com.spendinganalytics.model;
+package com.spendinganalytics.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

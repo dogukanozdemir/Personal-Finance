@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Upload, CheckCircle, XCircle, FileText, Loader } from 'lucide-react';
+import { Upload, CheckCircle, XCircle, FileText, Loader, Trash2, AlertTriangle } from 'lucide-react';
 import { importAPI } from '../utils/api';
 
 const Import = () => {
@@ -8,6 +8,9 @@ const Import = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<{[key: string]: 'pending' | 'processing' | 'success' | 'error'}>({});
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteResult, setDeleteResult] = useState<any>(null);
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -40,6 +43,30 @@ const Import = () => {
       setError(err.response?.data || 'Failed to import files');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setDeleting(true);
+    setError(null);
+    setDeleteResult(null);
+    
+    try {
+      const response = await importAPI.deleteAllData();
+      setDeleteResult(response.data);
+      setShowDeleteConfirm(false);
+      // Clear any import results
+      setResult(null);
+      setFiles([]);
+      // Reload page after 2 seconds to refresh all data
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to delete all data');
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
     }
   };
   
@@ -174,6 +201,116 @@ const Import = () => {
         </div>
       )}
       
+      {/* Delete All Data Section */}
+      <div className="card border-l-4 border-danger">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <h3 className="text-xl font-semibold text-danger mb-2">Delete All Data</h3>
+            <p className="text-text-muted text-sm">
+              Permanently delete all transactions, accounts, budgets, rules, and insights from the database.
+              <strong className="text-danger block mt-1">This action cannot be undone!</strong>
+            </p>
+          </div>
+          <AlertTriangle size={24} className="text-danger ml-4" />
+        </div>
+        
+        {!showDeleteConfirm && (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={deleting}
+            className="btn-danger"
+          >
+            <Trash2 size={18} className="mr-2" />
+            Delete All Data
+          </button>
+        )}
+        
+        {showDeleteConfirm && (
+          <div className="space-y-4">
+            <div className="p-4 bg-danger/10 border border-danger/30 rounded-lg">
+              <div className="flex items-start space-x-3">
+                <AlertTriangle size={24} className="text-danger mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-danger mb-2">Are you absolutely sure?</h4>
+                  <p className="text-sm text-text-muted">
+                    This will permanently delete:
+                  </p>
+                  <ul className="text-sm text-text-muted list-disc list-inside mt-2 space-y-1">
+                    <li>All transactions</li>
+                    <li>All accounts</li>
+                    <li>All budgets</li>
+                    <li>All rules</li>
+                    <li>All insights</li>
+                  </ul>
+                  <p className="text-sm font-semibold text-danger mt-3">
+                    This action cannot be undone!
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={handleDeleteAll}
+                disabled={deleting}
+                className="btn-danger flex-1"
+              >
+                {deleting ? (
+                  <>
+                    <Loader size={18} className="mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={18} className="mr-2" />
+                    Yes, Delete Everything
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {deleteResult && (
+          <div className="mt-4 p-4 bg-background rounded-lg border border-gray-700">
+            <div className="flex items-center space-x-2 mb-2">
+              <CheckCircle className="text-success" size={20} />
+              <h4 className="font-semibold">Data Deleted Successfully</h4>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+              <div>
+                <p className="text-text-muted">Transactions</p>
+                <p className="font-semibold">{deleteResult.transactionsDeleted || 0}</p>
+              </div>
+              <div>
+                <p className="text-text-muted">Accounts</p>
+                <p className="font-semibold">{deleteResult.accountsDeleted || 0}</p>
+              </div>
+              <div>
+                <p className="text-text-muted">Insights</p>
+                <p className="font-semibold">{deleteResult.insightsDeleted || 0}</p>
+              </div>
+              <div>
+                <p className="text-text-muted">Budgets</p>
+                <p className="font-semibold">{deleteResult.budgetsDeleted || 0}</p>
+              </div>
+              <div>
+                <p className="text-text-muted">Rules</p>
+                <p className="font-semibold">{deleteResult.rulesDeleted || 0}</p>
+              </div>
+            </div>
+            <p className="text-xs text-text-muted mt-2">Page will refresh in a moment...</p>
+          </div>
+        )}
+      </div>
+
       {/* Instructions */}
       <div className="card">
         <h3 className="text-xl font-semibold mb-4">How to Import</h3>

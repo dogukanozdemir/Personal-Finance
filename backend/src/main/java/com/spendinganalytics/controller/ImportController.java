@@ -1,33 +1,37 @@
 package com.spendinganalytics.controller;
 
-import com.spendinganalytics.model.Account;
-import com.spendinganalytics.model.ImportResult;
+import com.spendinganalytics.dto.AccountDTO;
+import com.spendinganalytics.dto.DeleteAllDataResultDTO;
+import com.spendinganalytics.dto.ImportResultDTO;
+import com.spendinganalytics.entity.Account;
 import com.spendinganalytics.repository.AccountRepository;
+import com.spendinganalytics.service.DataService;
 import com.spendinganalytics.service.ImportService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.spendinganalytics.util.DtoMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/import")
 @CrossOrigin(origins = "http://localhost:3000")
+@RequiredArgsConstructor
 public class ImportController {
     
-    @Autowired
-    private ImportService importService;
-    
-    @Autowired
-    private AccountRepository accountRepository;
+    private final ImportService importService;
+    private final AccountRepository accountRepository;
+    private final DataService dataService;
     
     @PostMapping("/upload")
     public ResponseEntity<?> uploadFile(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "accountId", required = false) Long accountId) {
         try {
-            ImportResult result = importService.importFile(file, accountId);
+            ImportResultDTO result = importService.importFile(file, accountId);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Error importing file: " + e.getMessage());
@@ -39,7 +43,7 @@ public class ImportController {
             @RequestParam("files") MultipartFile[] files,
             @RequestParam(value = "accountId", required = false) Long accountId) {
         try {
-            ImportResult result = importService.importMultipleFiles(files, accountId);
+            ImportResultDTO result = importService.importMultipleFiles(files, accountId);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Error importing files: " + e.getMessage());
@@ -47,14 +51,26 @@ public class ImportController {
     }
     
     @GetMapping("/accounts")
-    public ResponseEntity<List<Account>> getAccounts() {
-        return ResponseEntity.ok(accountRepository.findAll());
+    public ResponseEntity<List<AccountDTO>> getAccounts() {
+        return ResponseEntity.ok(accountRepository.findAll().stream()
+            .map(DtoMapper::toDto)
+            .collect(Collectors.toList()));
     }
     
     @PostMapping("/accounts")
-    public ResponseEntity<Account> createAccount(@RequestBody Account account) {
+    public ResponseEntity<AccountDTO> createAccount(@RequestBody Account account) {
         Account saved = accountRepository.save(account);
-        return ResponseEntity.ok(saved);
+        return ResponseEntity.ok(DtoMapper.toDto(saved));
+    }
+    
+    @DeleteMapping("/delete-all")
+    public ResponseEntity<DeleteAllDataResultDTO> deleteAllData() {
+        try {
+            DeleteAllDataResultDTO result = dataService.deleteAllData();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }
 

@@ -1,78 +1,70 @@
 package com.spendinganalytics.service;
 
 import com.spendinganalytics.repository.TransactionRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @Service
+@RequiredArgsConstructor
 public class DashboardService {
     
-    @Autowired
-    private TransactionRepository transactionRepository;
+    private final TransactionRepository transactionRepository;
     
     public Map<String, Object> getDashboardKPIs(String period) {
         Map<String, Object> kpis = new HashMap<>();
         
-        LocalDate endDate = LocalDate.now();
-        LocalDate startDate;
-        LocalDate previousStart;
-        LocalDate previousEnd;
+        LocalDate today = LocalDate.now();
         
-        switch (period.toLowerCase()) {
-            case "week":
-                startDate = endDate.minusWeeks(1);
-                previousStart = startDate.minusWeeks(1);
-                previousEnd = startDate.minusDays(1);
-                break;
-            case "month":
-                startDate = endDate.minusMonths(1);
-                previousStart = startDate.minusMonths(1);
-                previousEnd = startDate.minusDays(1);
-                break;
-            case "year":
-                startDate = endDate.minusYears(1);
-                previousStart = startDate.minusYears(1);
-                previousEnd = startDate.minusDays(1);
-                break;
-            default: // today
-                startDate = endDate;
-                previousStart = endDate.minusDays(1);
-                previousEnd = endDate.minusDays(1);
-        }
+        // Always use current month for "this period"
+        LocalDate currentMonthStart = today.withDayOfMonth(1);
+        LocalDate currentMonthEnd = today;
         
-        // Total spending current period
-        BigDecimal currentSpending = transactionRepository.getTotalSpendingBetween(startDate, endDate);
+        // Previous period is always previous month
+        LocalDate previousMonthStart = currentMonthStart.minusMonths(1);
+        LocalDate previousMonthEnd = currentMonthStart.minusDays(1);
+        
+        // Total spending current month (from start of month to today)
+        // Query already returns ABS(amount) and filters amount < 0, so result is positive
+        BigDecimal currentSpending = transactionRepository.getTotalSpendingBetween(currentMonthStart, currentMonthEnd);
         if (currentSpending == null) currentSpending = BigDecimal.ZERO;
-        kpis.put("totalSpent", currentSpending.abs());
+        kpis.put("totalSpent", currentSpending);
         
-        // Total spending previous period
-        BigDecimal previousSpending = transactionRepository.getTotalSpendingBetween(previousStart, previousEnd);
+        // Total spending previous month
+        BigDecimal previousSpending = transactionRepository.getTotalSpendingBetween(previousMonthStart, previousMonthEnd);
         if (previousSpending == null) previousSpending = BigDecimal.ZERO;
-        kpis.put("previousPeriodSpent", previousSpending.abs());
+        kpis.put("previousPeriodSpent", previousSpending);
         
         // Calculate change percentage
         if (previousSpending.compareTo(BigDecimal.ZERO) != 0) {
             BigDecimal change = currentSpending.subtract(previousSpending)
-                    .divide(previousSpending.abs(), 2, BigDecimal.ROUND_HALF_UP)
+                    .divide(previousSpending, 2, RoundingMode.HALF_UP)
                     .multiply(BigDecimal.valueOf(100));
             kpis.put("changePercent", change);
         } else {
-            kpis.put("changePercent", 0);
+            kpis.put("changePercent", BigDecimal.ZERO);
         }
         
-        // Average per day
-        long days = java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate) + 1;
-        BigDecimal avgPerDay = currentSpending.abs().divide(BigDecimal.valueOf(days), 2, BigDecimal.ROUND_HALF_UP);
+        // Average per day (current month so far)
+        long daysPassed = java.time.temporal.ChronoUnit.DAYS.between(currentMonthStart, currentMonthEnd) + 1;
+        BigDecimal avgPerDay = daysPassed > 0 
+            ? currentSpending.divide(BigDecimal.valueOf(daysPassed), 2, RoundingMode.HALF_UP)
+            : BigDecimal.ZERO;
         kpis.put("avgPerDay", avgPerDay);
         
-        // Category breakdown
-        List<Object[]> categoryData = transactionRepository.getSpendingByCategory(startDate, endDate);
+        // Projected month-end: based on average spending per day so far
+        int daysInMonth = today.lengthOfMonth();
+        BigDecimal projectedMonthEnd = avgPerDay.multiply(BigDecimal.valueOf(daysInMonth)).setScale(2, RoundingMode.HALF_UP);
+        kpis.put("projectedMonthEnd", projectedMonthEnd.doubleValue());
+        
+        // Category breakdown (current month)
+        List<Object[]> categoryData = transactionRepository.getSpendingByCategory(currentMonthStart, currentMonthEnd);
         Map<String, Double> categories = new HashMap<>();
         String topCategory = null;
         double topCategoryAmount = 0;
@@ -91,14 +83,6 @@ public class DashboardService {
         kpis.put("categories", categories);
         kpis.put("topCategory", topCategory);
         kpis.put("topCategoryAmount", topCategoryAmount);
-        
-        // Projected month-end (if current period is this month)
-        if ("month".equals(period.toLowerCase()) && startDate.getMonth() == endDate.getMonth()) {
-            int daysInMonth = endDate.lengthOfMonth();
-            int daysPassed = endDate.getDayOfMonth();
-            BigDecimal projected = avgPerDay.multiply(BigDecimal.valueOf(daysInMonth));
-            kpis.put("projectedMonthEnd", projected);
-        }
         
         return kpis;
     }

@@ -1,12 +1,15 @@
 package com.spendinganalytics.util;
 
+import lombok.experimental.UtilityClass;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
+@UtilityClass
 public class HashUtil {
     
-    public static String generateSHA256(String input) {
+    public String generateSHA256(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));

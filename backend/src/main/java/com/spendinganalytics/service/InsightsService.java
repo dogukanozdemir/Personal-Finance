@@ -1,9 +1,11 @@
 package com.spendinganalytics.service;
 
-import com.spendinganalytics.model.InsightCache;
+import com.spendinganalytics.dto.InsightCacheDTO;
+import com.spendinganalytics.entity.InsightCache;
 import com.spendinganalytics.repository.InsightCacheRepository;
 import com.spendinganalytics.repository.TransactionRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.spendinganalytics.util.DtoMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -12,17 +14,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class InsightsService {
     
-    @Autowired
-    private TransactionRepository transactionRepository;
+    private final TransactionRepository transactionRepository;
+    private final InsightCacheRepository insightCacheRepository;
     
-    @Autowired
-    private InsightCacheRepository insightCacheRepository;
-    
-    public List<InsightCache> generateInsights() {
+    public List<InsightCacheDTO> generateInsights() {
         List<InsightCache> insights = new ArrayList<>();
         
         // Clear old insights
@@ -69,10 +70,12 @@ public class InsightsService {
         }
         
         // Save all insights
-        return insightCacheRepository.saveAll(insights);
+        return insightCacheRepository.saveAll(insights).stream()
+            .map(DtoMapper::toDto)
+            .collect(Collectors.toList());
     }
     
-    public List<InsightCache> getRecentInsights() {
+    public List<InsightCacheDTO> getRecentInsights() {
         LocalDateTime oneDayAgo = LocalDateTime.now().minusDays(1);
         List<InsightCache> recent = insightCacheRepository.findByGeneratedAtAfter(oneDayAgo);
         
@@ -81,7 +84,9 @@ public class InsightsService {
             return generateInsights();
         }
         
-        return recent;
+        return recent.stream()
+            .map(DtoMapper::toDto)
+            .collect(Collectors.toList());
     }
 }
 

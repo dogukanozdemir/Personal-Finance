@@ -72,6 +72,7 @@ export const importAPI = {
   },
   getAccounts: () => api.get('/import/accounts'),
   createAccount: (data: any) => api.post('/import/accounts', data),
+  deleteAllData: () => api.delete('/import/delete-all'),
 };
 
 export const insightsAPI = {
@@ -81,6 +82,13 @@ export const insightsAPI = {
 
 export const aiAPI = {
   chat: (question: string) => api.post('/ai/chat', { question }),
+};
+
+export const subscriptionAPI = {
+  getPotential: () => api.get('/subscriptions/potential'),
+  getActive: () => api.get('/subscriptions/active'),
+  confirm: (merchant: string) => api.post('/subscriptions/confirm', { merchant }),
+  unmark: (merchant: string) => api.post('/subscriptions/unmark', { merchant }),
 };
 
 export default api;

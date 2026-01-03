@@ -1,6 +1,6 @@
 package com.spendinganalytics.repository;
 
-import com.spendinganalytics.model.Budget;
+import com.spendinganalytics.entity.Budget;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

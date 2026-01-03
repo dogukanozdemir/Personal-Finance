@@ -1,6 +1,6 @@
 package com.spendinganalytics.repository;
 
-import com.spendinganalytics.model.InsightCache;
+import com.spendinganalytics.entity.InsightCache;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

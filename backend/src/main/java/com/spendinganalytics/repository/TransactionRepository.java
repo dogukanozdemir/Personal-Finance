@@ -1,6 +1,6 @@
 package com.spendinganalytics.repository;
 
-import com.spendinganalytics.model.Transaction;
+import com.spendinganalytics.entity.Transaction;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -24,7 +24,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     @Query("SELECT t FROM Transaction t WHERE t.transactionDate >= :startDate ORDER BY t.transactionDate DESC")
     List<Transaction> findRecentTransactions(@Param("startDate") LocalDate startDate);
     
-    @Query("SELECT SUM(t.amount) FROM Transaction t WHERE t.transactionDate BETWEEN :start AND :end AND t.amount < 0")
+    @Query("SELECT COALESCE(SUM(ABS(t.amount)), 0) FROM Transaction t WHERE t.transactionDate BETWEEN :start AND :end AND t.amount != 0")
     BigDecimal getTotalSpendingBetween(@Param("start") LocalDate start, @Param("end") LocalDate end);
     
     @Query("SELECT t.category, SUM(t.amount) as total FROM Transaction t WHERE t.transactionDate BETWEEN :start AND :end AND t.amount < 0 GROUP BY t.category ORDER BY total ASC")

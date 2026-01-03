@@ -1,5 +1,6 @@
 package com.spendinganalytics.util;
 
+import lombok.experimental.UtilityClass;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
@@ -12,6 +13,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
 
+@UtilityClass
 public class ExcelParser {
     
     private static final Logger logger = LoggerFactory.getLogger(ExcelParser.class);

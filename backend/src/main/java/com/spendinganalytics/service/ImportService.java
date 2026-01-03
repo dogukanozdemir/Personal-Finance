@@ -1,15 +1,17 @@
 package com.spendinganalytics.service;
 
-import com.spendinganalytics.model.Account;
-import com.spendinganalytics.model.ImportResult;
-import com.spendinganalytics.model.Transaction;
+import com.spendinganalytics.dto.AccountDTO;
+import com.spendinganalytics.dto.ImportResultDTO;
+import com.spendinganalytics.entity.Account;
+import com.spendinganalytics.entity.Transaction;
 import com.spendinganalytics.repository.AccountRepository;
 import com.spendinganalytics.repository.TransactionRepository;
+import com.spendinganalytics.util.DtoMapper;
 import com.spendinganalytics.util.ExcelParser;
 import com.spendinganalytics.util.HashUtil;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,24 +22,21 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class ImportService {
     
     private static final Logger logger = LoggerFactory.getLogger(ImportService.class);
     
-    @Autowired
-    private TransactionRepository transactionRepository;
-    
-    @Autowired
-    private AccountRepository accountRepository;
+    private final TransactionRepository transactionRepository;
+    private final AccountRepository accountRepository;
     
     @Transactional
-    public ImportResult importFile(MultipartFile file, Long accountId) throws Exception {
+    public ImportResultDTO importFile(MultipartFile file, Long accountId) throws Exception {
         logger.info("Starting import for file: {}", file.getOriginalFilename());
         
-        ImportResult result = new ImportResult();
-        result.setTotalRows(0);
-        result.setNewTransactions(0);
-        result.setDuplicates(0);
+        int totalRows = 0;
+        int newTransactions = 0;
+        int duplicates = 0;
         
         // Get or create account
         Account account;
@@ -53,18 +52,18 @@ public class ImportService {
             account = accountRepository.save(account);
         }
         
-        result.setAccountName(account.getName());
+        String accountName = account.getName();
         
         // Parse Excel file
         try (InputStream inputStream = file.getInputStream()) {
             List<ExcelParser.ParsedTransaction> parsedTransactions = 
                     ExcelParser.parseGarantiFile(inputStream);
             
-            result.setTotalRows(parsedTransactions.size());
+            totalRows = parsedTransactions.size();
             
             if (parsedTransactions.isEmpty()) {
                 logger.warn("No transactions found in file");
-                return result;
+                return new ImportResultDTO(0, 0, 0, "", "", accountName);
             }
             
             // Update account type if not set
@@ -97,7 +96,7 @@ public class ImportService {
                 
                 // Check if transaction already exists
                 if (transactionRepository.findByDedupHash(dedupHash).isPresent()) {
-                    result.setDuplicates(result.getDuplicates() + 1);
+                    duplicates++;
                     continue;
                 }
                 
@@ -116,66 +115,58 @@ public class ImportService {
                 transaction.setIsSubscription(false);
                 
                 transactionRepository.save(transaction);
-                result.setNewTransactions(result.getNewTransactions() + 1);
+                newTransactions++;
             }
             
-            result.setDateRangeStart(minDate != null ? minDate.toString() : "");
-            result.setDateRangeEnd(maxDate != null ? maxDate.toString() : "");
+            String dateRangeStart = minDate != null ? minDate.toString() : "";
+            String dateRangeEnd = maxDate != null ? maxDate.toString() : "";
             
-            logger.info("Import completed: {} new, {} duplicates", 
-                    result.getNewTransactions(), result.getDuplicates());
+            logger.info("Import completed: {} new, {} duplicates", newTransactions, duplicates);
+            
+            return new ImportResultDTO(totalRows, newTransactions, duplicates, dateRangeStart, dateRangeEnd, accountName);
         }
-        
-        return result;
     }
     
     @Transactional
-    public ImportResult importMultipleFiles(MultipartFile[] files, Long accountId) throws Exception {
+    public ImportResultDTO importMultipleFiles(MultipartFile[] files, Long accountId) throws Exception {
         logger.info("Starting batch import for {} files", files.length);
         
-        ImportResult aggregatedResult = new ImportResult();
-        aggregatedResult.setTotalRows(0);
-        aggregatedResult.setNewTransactions(0);
-        aggregatedResult.setDuplicates(0);
-        
+        int totalRows = 0;
+        int newTransactions = 0;
+        int duplicates = 0;
         LocalDate overallMinDate = null;
         LocalDate overallMaxDate = null;
+        String accountName = null;
         
         for (MultipartFile file : files) {
             logger.info("Processing file: {}", file.getOriginalFilename());
             
             try {
-                ImportResult fileResult = importFile(file, accountId);
+                ImportResultDTO fileResult = importFile(file, accountId);
                 
                 // Aggregate results
-                aggregatedResult.setTotalRows(
-                    aggregatedResult.getTotalRows() + fileResult.getTotalRows()
-                );
-                aggregatedResult.setNewTransactions(
-                    aggregatedResult.getNewTransactions() + fileResult.getNewTransactions()
-                );
-                aggregatedResult.setDuplicates(
-                    aggregatedResult.getDuplicates() + fileResult.getDuplicates()
-                );
+                totalRows += fileResult.totalRows();
+                newTransactions += fileResult.newTransactions();
+                duplicates += fileResult.duplicates();
                 
                 // Update date range
-                if (fileResult.getDateRangeStart() != null && !fileResult.getDateRangeStart().isEmpty()) {
-                    LocalDate fileMinDate = LocalDate.parse(fileResult.getDateRangeStart());
+                if (fileResult.dateRangeStart() != null && !fileResult.dateRangeStart().isEmpty()) {
+                    LocalDate fileMinDate = LocalDate.parse(fileResult.dateRangeStart());
                     if (overallMinDate == null || fileMinDate.isBefore(overallMinDate)) {
                         overallMinDate = fileMinDate;
                     }
                 }
                 
-                if (fileResult.getDateRangeEnd() != null && !fileResult.getDateRangeEnd().isEmpty()) {
-                    LocalDate fileMaxDate = LocalDate.parse(fileResult.getDateRangeEnd());
+                if (fileResult.dateRangeEnd() != null && !fileResult.dateRangeEnd().isEmpty()) {
+                    LocalDate fileMaxDate = LocalDate.parse(fileResult.dateRangeEnd());
                     if (overallMaxDate == null || fileMaxDate.isAfter(overallMaxDate)) {
                         overallMaxDate = fileMaxDate;
                     }
                 }
                 
                 // Use first file's account name
-                if (aggregatedResult.getAccountName() == null) {
-                    aggregatedResult.setAccountName(fileResult.getAccountName());
+                if (accountName == null) {
+                    accountName = fileResult.accountName();
                 }
                 
             } catch (Exception e) {
@@ -184,13 +175,13 @@ public class ImportService {
             }
         }
         
-        aggregatedResult.setDateRangeStart(overallMinDate != null ? overallMinDate.toString() : "");
-        aggregatedResult.setDateRangeEnd(overallMaxDate != null ? overallMaxDate.toString() : "");
+        String dateRangeStart = overallMinDate != null ? overallMinDate.toString() : "";
+        String dateRangeEnd = overallMaxDate != null ? overallMaxDate.toString() : "";
         
         logger.info("Batch import completed: {} files processed, {} new transactions, {} duplicates", 
-                files.length, aggregatedResult.getNewTransactions(), aggregatedResult.getDuplicates());
+                files.length, newTransactions, duplicates);
         
-        return aggregatedResult;
+        return new ImportResultDTO(totalRows, newTransactions, duplicates, dateRangeStart, dateRangeEnd, accountName != null ? accountName : "");
     }
     
     private String generateDedupHash(Long accountId, LocalDate date, String merchant, 

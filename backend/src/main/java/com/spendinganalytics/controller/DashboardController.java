@@ -1,7 +1,7 @@
 package com.spendinganalytics.controller;
 
 import com.spendinganalytics.service.DashboardService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,10 +10,10 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/dashboard")
 @CrossOrigin(origins = "http://localhost:3000")
+@RequiredArgsConstructor
 public class DashboardController {
     
-    @Autowired
-    private DashboardService dashboardService;
+    private final DashboardService dashboardService;
     
     @GetMapping("/kpis")
     public ResponseEntity<Map<String, Object>> getDashboardKPIs(
