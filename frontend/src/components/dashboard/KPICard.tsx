@@ -4,7 +4,7 @@ interface KPICardProps {
   title: string;
   value: string;
   change?: number;
-  subtitle?: string;
+  subtitle?: string | React.ReactNode;
   icon?: React.ReactNode;
 }
 

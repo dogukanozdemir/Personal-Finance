@@ -55,9 +55,27 @@ const Dashboard = () => {
     ? `Based on ${activeDays} active ${activeDays === 1 ? 'day' : 'days'}`
     : 'Based on active days';
 
-  // Determine if projection should be shown (for THIS_MONTH only, and only if projectedMonthEnd is not null)
-  const shouldShowProjection = () => {
-    return period === 'THIS_MONTH' && kpis?.projectedMonthEnd != null;
+  // Get projection value and subtitle
+  const getProjectionValue = () => {
+    if (period === 'THIS_MONTH' && kpis?.projectedMonthEnd != null) {
+      return `${(Number(kpis.projectedMonthEnd) || 0).toFixed(2)} TL`;
+    }
+    return 'N/A';
+  };
+
+  const getProjectionSubtitle = () => {
+    if (period === 'THIS_MONTH' && kpis?.projectedMonthEndComparedPercent != null) {
+      const percent = Number(kpis.projectedMonthEndComparedPercent);
+      const isPositive = percent > 0;
+      const colorClass = isPositive ? 'text-danger' : 'text-success';
+      const direction = isPositive ? 'more' : 'less';
+      return (
+        <span className={colorClass}>
+          {percent > 0 ? '+' : ''}{percent.toFixed(1)}% {direction} than average
+        </span>
+      );
+    }
+    return 'Not available for selected period';
   };
 
   // Handle period change from TimeSelector
@@ -84,8 +102,8 @@ const Dashboard = () => {
       {/* Global Time Selector */}
       <TimeSelector period={period === 'MONTH' ? `MONTH:${year || currentYear}:${month || currentMonth}` : period} onPeriodChange={handlePeriodChange} />
       
-      {/* KPI Section - 3 Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* KPI Section - 4 Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {/* KPI 1 - Total Spent */}
         <KPICard
           title="Total Spent"
@@ -101,22 +119,30 @@ const Dashboard = () => {
           subtitle={avgPerDaySubtitle}
           icon={<Calendar size={32} />}
         />
+
+        {/* KPI 3 - Overall Average Per Day */}
+        <KPICard
+          title="Overall Average Per Day"
+          value={`${(Number(kpis?.overallAvgPerDay) || 0).toFixed(2)} TL`}
+          subtitle="Across all transactions"
+          icon={<Calendar size={32} />}
+        />
         
-        {/* KPI 3 - Projection (Conditional) */}
-        {shouldShowProjection() && kpis?.projectedMonthEnd != null && (
-          <KPICard
-            title="Projected Month-End"
-            value={`${(Number(kpis.projectedMonthEnd) || 0).toFixed(2)} TL`}
-            subtitle="Based on historical patterns and current pace"
-            icon={<TrendingUp size={32} />}
-          />
-        )}
+        {/* KPI 4 - Projected Month-End (Always visible) */}
+        <KPICard
+          title="Projected Month-End"
+          value={getProjectionValue()}
+          subtitle={getProjectionSubtitle()}
+          icon={<TrendingUp size={32} />}
+        />
       </div>
       
       {/* Main Chart Section */}
       <SpendChart 
         dataPoints={kpis?.dataPoints}
         isMonthly={period === 'YTD'}
+        overallAvgPerDay={kpis?.overallAvgPerDay ? Number(kpis.overallAvgPerDay) : undefined}
+        period={period}
       />
     </div>
   );

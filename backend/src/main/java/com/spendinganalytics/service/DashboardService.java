@@ -38,16 +38,24 @@ public class DashboardService {
     BigDecimal avgPerDay = statisticsService.averagePerActiveDay(totalSpent, current);
 
     BigDecimal projectedMonthEnd = null;
+    BigDecimal projectedMonthEndComparedPercent = null;
     if (period == DashboardPeriod.THIS_MONTH) {
       List<Transaction> lastTwelveFullMonths = loadLastTwelveFullMonths(today);
-      projectedMonthEnd = statisticsService.projectedMonthEnd(today, current, lastTwelveFullMonths);
+      var projectionDto = statisticsService.projectedMonthEnd(today, current, lastTwelveFullMonths);
+      projectedMonthEnd = projectionDto.projection();
+      projectedMonthEndComparedPercent = projectionDto.comparedPercentage();
     }
+
+    // Calculate overall average per day across all transactions
+    List<Transaction> allTransactions = transactionRepository.findAll();
+    BigDecimal overallTotalSpent = statisticsService.totalSpent(allTransactions);
+    BigDecimal overallAvgPerDay = statisticsService.averagePerActiveDay(overallTotalSpent, allTransactions);
 
     Map<String, BigDecimal> dataPoints =
         statisticsService.dataPoints(current, startDate, endDate, period);
 
     return new DashboardResponseDto(
-        totalSpent, previousSpent, changePercent, avgPerDay, projectedMonthEnd, dataPoints);
+        totalSpent, previousSpent, changePercent, avgPerDay, projectedMonthEnd, projectedMonthEndComparedPercent, overallAvgPerDay, dataPoints);
   }
 
   private List<Transaction> loadLastTwelveFullMonths(LocalDate today) {

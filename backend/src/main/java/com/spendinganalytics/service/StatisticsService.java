@@ -1,5 +1,6 @@
 package com.spendinganalytics.service;
 
+import com.spendinganalytics.dto.ProjectedMonthEndDto;
 import com.spendinganalytics.entity.Transaction;
 import com.spendinganalytics.enums.DashboardPeriod;
 import java.math.BigDecimal;
@@ -67,7 +68,7 @@ public class StatisticsService {
         : dailyTotals(transactions, startDate, endDate);
   }
 
-  public BigDecimal projectedMonthEnd(
+  public ProjectedMonthEndDto projectedMonthEnd(
       LocalDate asOfDate,
       List<Transaction> currentMonthTransactions,
       List<Transaction> lastTwelveFullMonthsTransactions) {
@@ -90,47 +91,53 @@ public class StatisticsService {
             .sorted()
             .toList();
 
-    if (nonZeroMonths.size() < 3) {
-      return paceProjection(spentSoFar, dayNumber, totalDaysInMonth);
-    }
-
     BigDecimal usualMonthlySpending =
         averageMonthlyTotal(monthTotal, nonZeroMonths).setScale(MONEY_SCALE, ROUNDING_MODE);
 
-    BigDecimal usualFraction =
-        averageFractionSpentByDay(
-            lastTwelveFullMonthsTransactions, monthTotal, nonZeroMonths, dayNumber);
+    BigDecimal projected;
+    if (nonZeroMonths.size() < 3) {
+      projected = paceProjection(spentSoFar, dayNumber, totalDaysInMonth);
+      BigDecimal comparedPercentage = calculateComparisonPercentage(projected, usualMonthlySpending);
+      return new ProjectedMonthEndDto(projected, comparedPercentage);
+    } else {
+      BigDecimal usualFraction =
+          averageFractionSpentByDay(
+              lastTwelveFullMonthsTransactions, monthTotal, nonZeroMonths, dayNumber);
 
-    if (usualFraction.compareTo(ZERO) <= 0) {
-      return paceProjection(spentSoFar, dayNumber, totalDaysInMonth);
+      if (usualFraction.compareTo(ZERO) <= 0) {
+        projected = paceProjection(spentSoFar, dayNumber, totalDaysInMonth);
+      } else {
+        usualFraction = clamp(usualFraction, MIN_FRACTION, MAX_FRACTION);
+
+        BigDecimal impliedMonthTotal = spentSoFar.divide(usualFraction, INTERNAL_SCALE, ROUNDING_MODE);
+
+        BigDecimal usualSpendingSoFar =
+            usualMonthlySpending.multiply(usualFraction).setScale(INTERNAL_SCALE, ROUNDING_MODE);
+
+        BigDecimal speedFactor =
+            (usualSpendingSoFar.compareTo(ZERO) > 0)
+                ? spentSoFar
+                    .setScale(INTERNAL_SCALE, ROUNDING_MODE)
+                    .divide(usualSpendingSoFar, INTERNAL_SCALE, ROUNDING_MODE)
+                : ONE;
+
+        BigDecimal correctedImplied = impliedMonthTotal.multiply(speedFactor);
+
+        BigDecimal trustWeight =
+            BigDecimal.valueOf(dayNumber)
+                .divide(BigDecimal.valueOf(totalDaysInMonth), INTERNAL_SCALE, ROUNDING_MODE);
+
+        projected =
+            ONE.subtract(trustWeight)
+                .multiply(usualMonthlySpending)
+                .add(trustWeight.multiply(correctedImplied));
+        projected = projected.setScale(MONEY_SCALE, ROUNDING_MODE);
+      }
     }
 
-    usualFraction = clamp(usualFraction, MIN_FRACTION, MAX_FRACTION);
+    BigDecimal comparedPercentage = calculateComparisonPercentage(projected, usualMonthlySpending);
 
-    BigDecimal impliedMonthTotal = spentSoFar.divide(usualFraction, INTERNAL_SCALE, ROUNDING_MODE);
-
-    BigDecimal usualSpendingSoFar =
-        usualMonthlySpending.multiply(usualFraction).setScale(INTERNAL_SCALE, ROUNDING_MODE);
-
-    BigDecimal speedFactor =
-        (usualSpendingSoFar.compareTo(ZERO) > 0)
-            ? spentSoFar
-                .setScale(INTERNAL_SCALE, ROUNDING_MODE)
-                .divide(usualSpendingSoFar, INTERNAL_SCALE, ROUNDING_MODE)
-            : ONE;
-
-    BigDecimal correctedImplied = impliedMonthTotal.multiply(speedFactor);
-
-    BigDecimal trustWeight =
-        BigDecimal.valueOf(dayNumber)
-            .divide(BigDecimal.valueOf(totalDaysInMonth), INTERNAL_SCALE, ROUNDING_MODE);
-
-    BigDecimal projected =
-        ONE.subtract(trustWeight)
-            .multiply(usualMonthlySpending)
-            .add(trustWeight.multiply(correctedImplied));
-
-    return projected.setScale(MONEY_SCALE, ROUNDING_MODE);
+    return new ProjectedMonthEndDto(projected, comparedPercentage);
   }
 
   private Map<String, BigDecimal> dailyTotals(
@@ -230,6 +237,18 @@ public class StatisticsService {
     return spentSoFar
         .divide(BigDecimal.valueOf(dayNumber), INTERNAL_SCALE, ROUNDING_MODE)
         .multiply(BigDecimal.valueOf(totalDaysInMonth))
+        .setScale(MONEY_SCALE, ROUNDING_MODE);
+  }
+
+  private BigDecimal calculateComparisonPercentage(
+      BigDecimal projection, BigDecimal averageMonthlySpending) {
+    if (averageMonthlySpending.compareTo(ZERO) <= 0) {
+      return ZERO.setScale(MONEY_SCALE, ROUNDING_MODE);
+    }
+    return projection
+        .subtract(averageMonthlySpending)
+        .divide(averageMonthlySpending, INTERNAL_SCALE, ROUNDING_MODE)
+        .multiply(BigDecimal.valueOf(100))
         .setScale(MONEY_SCALE, ROUNDING_MODE);
   }
 
