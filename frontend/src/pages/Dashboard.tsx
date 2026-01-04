@@ -1,12 +1,19 @@
+import { useState } from 'react';
 import { useDashboard } from '../hooks/useDashboard';
 import KPICard from '../components/dashboard/KPICard';
 import SpendChart from '../components/dashboard/SpendChart';
-import CategoryChart from '../components/dashboard/CategoryChart';
-import SubscriptionsPanel from '../components/dashboard/SubscriptionsPanel';
-import { Wallet, TrendingUp, Calendar, Tag } from 'lucide-react';
+import TimeSelector from '../components/dashboard/TimeSelector';
+import { Wallet, Calendar, TrendingUp } from 'lucide-react';
 
 const Dashboard = () => {
-  const { kpis, loading, error } = useDashboard('month');
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1; // 1-indexed
+  
+  const [period, setPeriod] = useState<string>('THIS_MONTH');
+  const [month, setMonth] = useState<number | undefined>(undefined);
+  const [year, setYear] = useState<number | undefined>(undefined);
+  
+  const { kpis, loading, error } = useDashboard(period, month, year);
   
   if (loading) {
     return (
@@ -23,94 +30,96 @@ const Dashboard = () => {
       </div>
     );
   }
-  
-  // Transform categories data for pie chart
-  const categoryData = kpis?.categories ? 
-    Object.entries(kpis.categories).map(([name, value]) => ({
-      name,
-      value: Math.abs(value as number)
-    })) : [];
-  
-  // Mock chart data
-  const spendData = [
-    { date: '1', amount: 1200 },
-    { date: '5', amount: 1800 },
-    { date: '10', amount: 2200 },
-    { date: '15', amount: 1500 },
-    { date: '20', amount: 2800 },
-    { date: '25', amount: 2400 },
-    { date: '30', amount: 3100 },
-  ];
-  
+
+  // Format period subtitle
+  const getPeriodSubtitle = () => {
+    if (period === 'THIS_MONTH') {
+      return 'This Month';
+    } else if (period === 'MONTH') {
+      if (month && year) {
+        const date = new Date(year, month - 1);
+        return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      }
+      return 'Selected Month';
+    } else if (period === 'YTD') {
+      return year ? `Year to Date ${year}` : 'Year to Date';
+    }
+    return 'Selected period';
+  };
+
+  // Calculate active days from dataPoints (for daily views)
+  const activeDays = (period === 'THIS_MONTH' || period === 'MONTH') && kpis?.dataPoints
+    ? Object.keys(kpis.dataPoints).length
+    : 0;
+  const avgPerDaySubtitle = activeDays > 0 
+    ? `Based on ${activeDays} active ${activeDays === 1 ? 'day' : 'days'}`
+    : 'Based on active days';
+
+  // Determine if projection should be shown (for THIS_MONTH only, and only if projectedMonthEnd is not null)
+  const shouldShowProjection = () => {
+    return period === 'THIS_MONTH' && kpis?.projectedMonthEnd != null;
+  };
+
+  // Handle period change from TimeSelector
+  const handlePeriodChange = (newPeriod: string) => {
+    if (newPeriod.startsWith('MONTH:')) {
+      // Parse MONTH:year:month format
+      const parts = newPeriod.split(':');
+      if (parts.length === 3) {
+        setPeriod('MONTH');
+        setYear(parseInt(parts[1]));
+        setMonth(parseInt(parts[2])); // Already 1-indexed from TimeSelector
+      }
+    } else {
+      setPeriod(newPeriod);
+      if (newPeriod === 'THIS_MONTH' || newPeriod === 'YTD') {
+        setMonth(undefined);
+        setYear(undefined);
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Global Time Selector */}
+      <TimeSelector period={period === 'MONTH' ? `MONTH:${year || currentYear}:${month || currentMonth}` : period} onPeriodChange={handlePeriodChange} />
+      
+      {/* KPI Section - 3 Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* KPI 1 - Total Spent */}
         <KPICard
-          title="Total Spent This Period"
-          value={`${kpis?.totalSpent?.toFixed(2) || '0.00'} TL`}
-          change={kpis?.changePercent}
+          title="Total Spent"
+          value={`${(Number(kpis?.totalSpent) || 0).toFixed(2)} TL`}
+          subtitle={getPeriodSubtitle()}
           icon={<Wallet size={32} />}
         />
         
+        {/* KPI 2 - Average Per Day */}
         <KPICard
-          title="Average per Day"
-          value={`${kpis?.avgPerDay?.toFixed(2) || '0.00'} TL`}
-          subtitle="Daily spending average"
+          title="Average Per Day"
+          value={`${(Number(kpis?.avgPerDay) || 0).toFixed(2)} TL`}
+          subtitle={avgPerDaySubtitle}
           icon={<Calendar size={32} />}
         />
         
-        <KPICard
-          title="Projected Month-End"
-          value={`${kpis?.projectedMonthEnd?.toFixed(2) || '0.00'} TL`}
-          subtitle="Based on current rate"
-          icon={<TrendingUp size={32} />}
-        />
-        
-        <KPICard
-          title="Top Category"
-          value={kpis?.topCategory || 'N/A'}
-          subtitle={`${kpis?.topCategoryAmount?.toFixed(2) || '0.00'} TL`}
-          icon={<Tag size={32} />}
-        />
+        {/* KPI 3 - Projection (Conditional) */}
+        {shouldShowProjection() && kpis?.projectedMonthEnd != null && (
+          <KPICard
+            title="Projected Month-End"
+            value={`${(Number(kpis.projectedMonthEnd) || 0).toFixed(2)} TL`}
+            subtitle="Based on historical patterns and current pace"
+            icon={<TrendingUp size={32} />}
+          />
+        )}
       </div>
       
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SpendChart data={spendData} />
-        <CategoryChart data={categoryData} />
-      </div>
-      
-      {/* Insights Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <SubscriptionsPanel />
-        
-        <div className="card">
-          <h3 className="text-xl font-semibold mb-4">What Changed?</h3>
-          <div className="space-y-3">
-            <div className="p-3 bg-background rounded-lg">
-              <p className="font-medium">Delivery spending up 25%</p>
-              <p className="text-sm text-text-muted">vs last month</p>
-            </div>
-            <div className="p-3 bg-background rounded-lg">
-              <p className="font-medium">New merchant detected</p>
-              <p className="text-sm text-text-muted">Sunam Gida</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="card">
-          <h3 className="text-xl font-semibold mb-4">Largest Spike</h3>
-          <div className="p-3 bg-background rounded-lg">
-            <p className="font-medium">Paycell/Hessapli MP</p>
-            <p className="text-2xl font-bold my-2">2,242.22 TL</p>
-            <p className="text-sm text-text-muted">Akaryakıt - Nov 28</p>
-          </div>
-        </div>
-      </div>
+      {/* Main Chart Section */}
+      <SpendChart 
+        dataPoints={kpis?.dataPoints}
+        isMonthly={period === 'YTD'}
+      />
     </div>
   );
 };
 
 export default Dashboard;
-

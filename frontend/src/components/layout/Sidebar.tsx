@@ -1,11 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
 import { 
   Home, 
-  ArrowLeftRight, 
-  Lightbulb, 
-  Target, 
-  MessageSquare, 
-  Upload 
+  Upload,
+  Settings
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -13,11 +10,8 @@ const Sidebar = () => {
   
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: Home },
-    { path: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-    { path: '/insights', label: 'Insights', icon: Lightbulb },
-    { path: '/budgets', label: 'Budgets', icon: Target },
-    { path: '/ai', label: 'AI Analysis', icon: MessageSquare },
     { path: '/import', label: 'Import', icon: Upload },
+    { path: '/settings', label: 'Settings', icon: Settings },
   ];
   
   return (

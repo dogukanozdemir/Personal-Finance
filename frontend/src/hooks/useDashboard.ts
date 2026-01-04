@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react';
 import { dashboardAPI } from '../utils/api';
 
-export const useDashboard = (period: string = 'month') => {
+export const useDashboard = (period: string = 'THIS_MONTH', month?: number, year?: number) => {
   const [kpis, setKpis] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
-    const fetchKPIs = async () => {
+    const fetchDashboard = async () => {
       try {
         setLoading(true);
-        const response = await dashboardAPI.getKPIs(period);
+        const response = await dashboardAPI.getDashboard(period, month, year);
         setKpis(response.data);
         setError(null);
       } catch (err: any) {
@@ -20,8 +20,8 @@ export const useDashboard = (period: string = 'month') => {
       }
     };
     
-    fetchKPIs();
-  }, [period]);
+    fetchDashboard();
+  }, [period, month, year]);
   
   return { kpis, loading, error };
 };

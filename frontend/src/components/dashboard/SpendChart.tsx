@@ -1,44 +1,71 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface SpendChartProps {
-  data: any[];
+  dataPoints: Map<string, number> | Record<string, number> | undefined;
+  isMonthly?: boolean;
 }
 
-const SpendChart = ({ data }: SpendChartProps) => {
+const SpendChart = ({ dataPoints, isMonthly = false }: SpendChartProps) => {
+  // Convert Map or object to array format for recharts
+  const chartData = dataPoints 
+    ? Object.entries(dataPoints).map(([date, amount]) => ({
+        period: date,
+        amount: typeof amount === 'number' ? amount : parseFloat(String(amount)) || 0,
+      }))
+    : [];
+
+  if (!chartData || chartData.length === 0) {
+    return (
+      <div className="card">
+        <h3 className="text-xl font-semibold mb-4">Spending Over Time</h3>
+        <div className="flex items-center justify-center h-[400px] text-text-muted">
+          No data available for this period
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="card">
       <h3 className="text-xl font-semibold mb-4">Spending Over Time</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <AreaChart data={data}>
-          <defs>
-            <linearGradient id="colorSpent" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-            </linearGradient>
-          </defs>
+      <ResponsiveContainer width="100%" height={400}>
+        <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-          <XAxis dataKey="date" stroke="#a3a3a3" />
-          <YAxis stroke="#a3a3a3" />
+          <XAxis 
+            dataKey="period" 
+            stroke="#a3a3a3"
+            tick={{ fill: '#a3a3a3' }}
+            angle={isMonthly ? 0 : -45}
+            textAnchor={isMonthly ? 'middle' : 'end'}
+            height={isMonthly ? 30 : 80}
+          />
+          <YAxis 
+            stroke="#a3a3a3"
+            tick={{ fill: '#a3a3a3' }}
+            label={{ value: 'Spend (TL)', angle: -90, position: 'insideLeft', fill: '#a3a3a3' }}
+          />
           <Tooltip 
             contentStyle={{ 
               backgroundColor: '#151515', 
               border: '1px solid #333',
               borderRadius: '8px',
               color: '#f5f5f5'
-            }} 
+            }}
+            formatter={(value: number) => [`${value.toFixed(2)} TL`, 'Spend']}
           />
-          <Area 
+          <Legend />
+          <Line 
             type="monotone" 
             dataKey="amount" 
             stroke="#3b82f6" 
-            fillOpacity={1} 
-            fill="url(#colorSpent)" 
+            strokeWidth={2}
+            dot={{ fill: '#3b82f6', r: 3 }}
+            name="Spend"
           />
-        </AreaChart>
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );
 };
 
 export default SpendChart;
-

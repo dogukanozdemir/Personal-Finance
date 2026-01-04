@@ -1,11 +1,8 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
-import Transactions from './pages/Transactions';
-import Insights from './pages/Insights';
-import Budgets from './pages/Budgets';
-import AIAnalysis from './pages/AIAnalysis';
 import Import from './pages/Import';
+import Settings from './pages/Settings';
 
 function App() {
   return (
@@ -13,11 +10,8 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/transactions" element={<Transactions />} />
-          <Route path="/insights" element={<Insights />} />
-          <Route path="/budgets" element={<Budgets />} />
-          <Route path="/ai" element={<AIAnalysis />} />
           <Route path="/import" element={<Import />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>
     </Router>
