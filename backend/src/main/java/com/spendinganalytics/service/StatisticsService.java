@@ -57,13 +57,13 @@ public class StatisticsService {
     return totalSpent.divide(BigDecimal.valueOf(activeDays), MONEY_SCALE, ROUNDING_MODE);
   }
 
-  /** Data points for charts: - THIS_MONTH and MONTH => daily totals - YTD => monthly totals */
+  /** Data points for charts: - THIS_MONTH and MONTH => daily totals - YTD and YEAR => monthly totals */
   public Map<String, BigDecimal> dataPoints(
       List<Transaction> transactions,
       LocalDate startDate,
       LocalDate endDate,
       DashboardPeriod period) {
-    return (period == DashboardPeriod.YTD)
+    return (period == DashboardPeriod.YTD || period == DashboardPeriod.YEAR)
         ? monthlyTotals(transactions, startDate, endDate)
         : dailyTotals(transactions, startDate, endDate);
   }

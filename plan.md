@@ -1,0 +1,13 @@
+Features to implement:
+- Dashboard
+    - Pie chart of category breakdown on how much spent per category
+    - fix average monthly spend
+- Transactions page:
+    - Ability to manually select transactions and mark them as recurring subscribtions with options:
+        - Auto select merchant as a subscription no matter the spending
+        - Auto select merchant as a subscription with a +/-% range of price
+- Subscriptions page:
+    - System lists potential subscriptions it has identified and presents user to confirm/deny
+    - Lists overall spending monthly for those subscriptions
+- Budgets:
+    - Create budget for overall/category spending

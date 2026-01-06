@@ -51,11 +51,22 @@ public class DashboardService {
     BigDecimal overallTotalSpent = statisticsService.totalSpent(allTransactions);
     BigDecimal overallAvgPerDay = statisticsService.averagePerActiveDay(overallTotalSpent, allTransactions);
 
+    // Calculate average monthly spend for YTD and YEAR
+    BigDecimal avgMonthlySpend = null;
+    if (period == DashboardPeriod.YTD || period == DashboardPeriod.YEAR) {
+      Map<String, BigDecimal> monthlyDataPoints = statisticsService.dataPoints(current, startDate, endDate, period);
+      if (!monthlyDataPoints.isEmpty()) {
+        BigDecimal sum = monthlyDataPoints.values().stream()
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        avgMonthlySpend = sum.divide(BigDecimal.valueOf(monthlyDataPoints.size()), 2, java.math.RoundingMode.HALF_UP);
+      }
+    }
+
     Map<String, BigDecimal> dataPoints =
         statisticsService.dataPoints(current, startDate, endDate, period);
 
     return new DashboardResponseDto(
-        totalSpent, previousSpent, changePercent, avgPerDay, projectedMonthEnd, projectedMonthEndComparedPercent, overallAvgPerDay, dataPoints);
+        totalSpent, previousSpent, changePercent, avgPerDay, projectedMonthEnd, projectedMonthEndComparedPercent, overallAvgPerDay, avgMonthlySpend, dataPoints);
   }
 
   private List<Transaction> loadLastTwelveFullMonths(LocalDate today) {
@@ -71,6 +82,7 @@ public class DashboardService {
       case THIS_MONTH -> today.withDayOfMonth(1);
       case MONTH -> YearMonth.of(resolveYear(year, today), resolveMonth(month, today)).atDay(1);
       case YTD -> LocalDate.of(resolveYear(year, today), 1, 1);
+      case YEAR -> LocalDate.of(resolveYear(year, today), 1, 1);
     };
   }
 
@@ -86,13 +98,17 @@ public class DashboardService {
         int y = resolveYear(year, today);
         yield (y == today.getYear()) ? today : LocalDate.of(y, 12, 31);
       }
+      case YEAR -> {
+        int y = resolveYear(year, today);
+        yield LocalDate.of(y, 12, 31);
+      }
     };
   }
 
   private LocalDate resolvePreviousStartDate(DashboardPeriod period, LocalDate currentStart) {
     return switch (period) {
       case THIS_MONTH, MONTH -> currentStart.minusMonths(1);
-      case YTD -> currentStart.minusYears(1);
+      case YTD, YEAR -> currentStart.minusYears(1);
     };
   }
 
@@ -100,7 +116,7 @@ public class DashboardService {
       DashboardPeriod period, LocalDate previousStart, LocalDate currentEnd) {
     return switch (period) {
       case THIS_MONTH, MONTH -> previousStart.withDayOfMonth(previousStart.lengthOfMonth());
-      case YTD -> currentEnd.minusYears(1);
+      case YTD, YEAR -> currentEnd.minusYears(1);
     };
   }
 

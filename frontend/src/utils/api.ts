@@ -40,5 +40,28 @@ export const settingsAPI = {
   deleteAllData: () => api.delete('/import/delete-all'),
 };
 
+export const transactionsAPI = {
+  getTransactions: (params: {
+    startDate?: string;
+    endDate?: string;
+    minAmount?: number;
+    maxAmount?: number;
+    merchant?: string;
+    page?: number;
+    size?: number;
+  }) => {
+    const queryParams = new URLSearchParams();
+    if (params.startDate) queryParams.append('startDate', params.startDate);
+    if (params.endDate) queryParams.append('endDate', params.endDate);
+    if (params.minAmount !== undefined) queryParams.append('minAmount', params.minAmount.toString());
+    if (params.maxAmount !== undefined) queryParams.append('maxAmount', params.maxAmount.toString());
+    if (params.merchant) queryParams.append('merchant', params.merchant);
+    if (params.page !== undefined) queryParams.append('page', params.page.toString());
+    if (params.size !== undefined) queryParams.append('size', params.size.toString());
+    return api.get(`/transactions?${queryParams.toString()}`);
+  },
+  getMerchants: () => api.get('/transactions/merchants'),
+};
+
 export default api;
 

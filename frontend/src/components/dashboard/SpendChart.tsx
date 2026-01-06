@@ -4,14 +4,20 @@ interface SpendChartProps {
   dataPoints: Map<string, number> | Record<string, number> | undefined;
   isMonthly?: boolean;
   overallAvgPerDay?: number;
+  avgMonthlySpend?: number;
   period?: string;
+  onDayClick?: (date: string) => void;
+  selectedDate?: string | null;
 }
 
 const SpendChart = ({ 
   dataPoints, 
   isMonthly = false,
   overallAvgPerDay = 0,
-  period = 'THIS_MONTH'
+  avgMonthlySpend,
+  period = 'THIS_MONTH',
+  onDayClick,
+  selectedDate
 }: SpendChartProps) => {
   // Convert Map or object to array format for recharts
   const chartData = dataPoints 
@@ -31,9 +37,11 @@ const SpendChart = ({
   
   const processedData = chartData.map((item) => {
     const isToday = !isMonthly && item.period === todayStr && (period === 'THIS_MONTH' || period.startsWith('MONTH:'));
+    const isSelected = !isMonthly && selectedDate && item.period === selectedDate;
     return {
       ...item,
       isToday,
+      isSelected,
     };
   });
 
@@ -48,6 +56,10 @@ const SpendChart = ({
     );
   }
 
+  // Determine which average to use and label
+  const referenceValue = isMonthly && avgMonthlySpend ? avgMonthlySpend : overallAvgPerDay;
+  const referenceLabel = isMonthly ? "Average monthly spend" : "Average per day";
+
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -55,9 +67,9 @@ const SpendChart = ({
       
       if (!amountPayload) return null;
 
-      const dailySpend = amountPayload.value;
-      const diff = dailySpend - overallAvgPerDay;
-      const diffPercent = overallAvgPerDay > 0 ? (diff / overallAvgPerDay) * 100 : 0;
+      const spend = amountPayload.value;
+      const diff = referenceValue > 0 ? spend - referenceValue : 0;
+      const diffPercent = referenceValue > 0 ? (diff / referenceValue) * 100 : 0;
       const isAboveAverage = diff > 0;
 
       return (
@@ -65,10 +77,10 @@ const SpendChart = ({
           <p className="text-text-muted text-sm mb-2">{label}</p>
           <div>
             <p className="text-text font-semibold">
-              {`${dailySpend.toFixed(2)} TL`}
-              <span className="text-text-muted text-sm ml-2">Daily Spend</span>
+              {`${spend.toFixed(2)} TL`}
+              <span className="text-text-muted text-sm ml-2">{isMonthly ? 'Monthly Spend' : 'Daily Spend'}</span>
             </p>
-            {overallAvgPerDay > 0 && (
+            {referenceValue > 0 && (
               <p className={`text-xs mt-1 ${isAboveAverage ? 'text-danger' : 'text-success'}`}>
                 {isAboveAverage ? 'Above average' : 'Below average'} by {Math.abs(diff).toFixed(2)} TL ({Math.abs(diffPercent).toFixed(0)}%)
               </p>
@@ -80,12 +92,12 @@ const SpendChart = ({
     return null;
   };
 
-  // Color for bars - orange if above overall average, blue if below
+  // Color for bars - orange if above reference average, blue if below
   const getBarColor = (entry: any) => {
-    if (overallAvgPerDay <= 0) {
+    if (referenceValue <= 0) {
       return '#3b82f6'; // blue/calm
     }
-    if (entry.amount > overallAvgPerDay) {
+    if (entry.amount > referenceValue) {
       return '#f59e0b'; // orange/warning
     }
     return '#3b82f6'; // blue/calm
@@ -134,14 +146,20 @@ const SpendChart = ({
           />
           <Tooltip content={<CustomTooltip />} />
           
-          {/* Average per day reference line */}
-          {overallAvgPerDay > 0 && (
+          {/* Reference line - average per day for daily view, average monthly for YTD */}
+          {referenceValue > 0 && (
             <ReferenceLine 
               yAxisId="spend"
-              y={overallAvgPerDay} 
-              stroke="#a3a3a3" 
+              y={referenceValue} 
+              stroke={isMonthly ? "#60a5fa" : "#a3a3a3"} 
               strokeDasharray="5 5" 
-              label={{ value: "Average per day", position: "right", fill: "#a3a3a3", fontSize: 12, offset: 10 }}
+              label={{ 
+                value: referenceLabel, 
+                position: "right", 
+                fill: isMonthly ? "#60a5fa" : "#a3a3a3", 
+                fontSize: 12, 
+                offset: 10 
+              }}
             />
           )}
           
@@ -152,15 +170,30 @@ const SpendChart = ({
             radius={[4, 4, 0, 0]}
             name="Daily Spend"
             fill="#3b82f6"
+            onClick={(data: any, index: number, e: any) => {
+              if (!isMonthly && onDayClick) {
+                // Try to get period from the data point
+                const date = data?.period || (processedData[index]?.period);
+                if (date) {
+                  onDayClick(date);
+                }
+              }
+            }}
+            style={{ cursor: !isMonthly ? 'pointer' : 'default' }}
           >
             {processedData.map((entry, index) => {
               const barColor = getBarColor(entry);
+              // Highlight selected day with different color/border
+              const isSelected = entry.isSelected;
+              const strokeColor = isSelected ? '#10b981' : (entry.isToday ? '#ef4444' : barColor);
+              const strokeWidth = isSelected ? 3 : (entry.isToday ? 3 : 1);
               return (
                 <Cell 
                   key={`cell-${index}`} 
-                  fill={barColor}
-                  stroke={entry.isToday ? '#ef4444' : barColor}
-                  strokeWidth={entry.isToday ? 3 : 1}
+                  fill={isSelected ? '#10b981' : barColor}
+                  stroke={strokeColor}
+                  strokeWidth={strokeWidth}
+                  opacity={isSelected ? 0.9 : 1}
                 />
               );
             })}

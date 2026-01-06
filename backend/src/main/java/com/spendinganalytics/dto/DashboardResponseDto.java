@@ -11,4 +11,5 @@ public record DashboardResponseDto(
     BigDecimal projectedMonthEnd,
     BigDecimal projectedMonthEndComparedPercent,
     BigDecimal overallAvgPerDay,
+    BigDecimal avgMonthlySpend,
     Map<String, BigDecimal> dataPoints) {}

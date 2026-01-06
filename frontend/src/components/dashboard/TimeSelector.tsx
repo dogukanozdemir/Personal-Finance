@@ -6,7 +6,7 @@ interface TimeSelectorProps {
   onPeriodChange: (period: string) => void;
 }
 
-type PeriodMode = 'THIS_MONTH' | 'SPECIFIC_MONTH' | 'YTD';
+type PeriodMode = 'THIS_MONTH' | 'SPECIFIC_MONTH' | 'YTD' | 'SPECIFIC_YEAR';
 
 const TimeSelector = ({ period, onPeriodChange }: TimeSelectorProps) => {
   const currentYear = new Date().getFullYear();
@@ -21,6 +21,7 @@ const TimeSelector = ({ period, onPeriodChange }: TimeSelectorProps) => {
     if (period === 'THIS_MONTH') return 'THIS_MONTH';
     if (period === 'YTD') return 'YTD';
     if (period.startsWith('MONTH:')) return 'SPECIFIC_MONTH';
+    if (period.startsWith('YEAR:')) return 'SPECIFIC_YEAR';
     return 'THIS_MONTH'; // default
   };
 
@@ -28,7 +29,7 @@ const TimeSelector = ({ period, onPeriodChange }: TimeSelectorProps) => {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
 
-  // Parse period to extract year/month when mode is SPECIFIC_MONTH
+  // Parse period to extract year/month when mode is SPECIFIC_MONTH or SPECIFIC_YEAR
   useEffect(() => {
     const currentMode = getCurrentMode();
     setMode(currentMode);
@@ -38,6 +39,11 @@ const TimeSelector = ({ period, onPeriodChange }: TimeSelectorProps) => {
       if (parts.length === 3) {
         setSelectedYear(parseInt(parts[1]) || currentYear);
         setSelectedMonth((parseInt(parts[2]) || (currentMonth + 1)) - 1); // Convert 1-indexed to 0-indexed
+      }
+    } else if (currentMode === 'SPECIFIC_YEAR' && period.startsWith('YEAR:')) {
+      const parts = period.split(':');
+      if (parts.length === 2) {
+        setSelectedYear(parseInt(parts[1]) || currentYear);
       }
     }
   }, [period]);
@@ -52,6 +58,9 @@ const TimeSelector = ({ period, onPeriodChange }: TimeSelectorProps) => {
     } else if (newMode === 'SPECIFIC_MONTH') {
       // Trigger with current selections
       onPeriodChange(`MONTH:${selectedYear}:${selectedMonth + 1}`);
+    } else if (newMode === 'SPECIFIC_YEAR') {
+      // Trigger with current year selection
+      onPeriodChange(`YEAR:${selectedYear}`);
     }
   };
 
@@ -59,6 +68,8 @@ const TimeSelector = ({ period, onPeriodChange }: TimeSelectorProps) => {
     setSelectedYear(year);
     if (mode === 'SPECIFIC_MONTH') {
       onPeriodChange(`MONTH:${year}:${selectedMonth + 1}`);
+    } else if (mode === 'SPECIFIC_YEAR') {
+      onPeriodChange(`YEAR:${year}`);
     } else if (mode === 'YTD') {
       // For YTD, we might want to pass year, but backend expects just 'YTD'
       // Keeping it as YTD for now, backend should handle current year
@@ -81,7 +92,7 @@ const TimeSelector = ({ period, onPeriodChange }: TimeSelectorProps) => {
       </div>
       
       <div className="flex flex-wrap items-center gap-3">
-        {/* Toggle Group: Three buttons */}
+        {/* Toggle Group: Four buttons */}
         <div className="flex items-center gap-2 bg-background rounded-lg p-1 border border-gray-700">
           <button
             onClick={() => handleModeChange('THIS_MONTH')}
@@ -115,6 +126,17 @@ const TimeSelector = ({ period, onPeriodChange }: TimeSelectorProps) => {
           >
             Year to Date
           </button>
+          
+          <button
+            onClick={() => handleModeChange('SPECIFIC_YEAR')}
+            className={`px-4 py-2 rounded-md font-medium transition-all ${
+              mode === 'SPECIFIC_YEAR'
+                ? 'bg-primary text-white'
+                : 'text-text-muted hover:text-text hover:bg-card-hover'
+            }`}
+          >
+            Specific Year
+          </button>
         </div>
 
         {/* Conditional Dropdowns */}
@@ -137,6 +159,20 @@ const TimeSelector = ({ period, onPeriodChange }: TimeSelectorProps) => {
             >
               {months.map((monthName, index) => (
                 <option key={index} value={index}>{monthName}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        
+        {mode === 'SPECIFIC_YEAR' && (
+          <div className="flex items-center space-x-2">
+            <select
+              value={selectedYear}
+              onChange={(e) => handleYearChange(parseInt(e.target.value))}
+              className="bg-background border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary text-text"
+            >
+              {Array.from({ length: 5 }, (_, i) => currentYear - 2 + i).map(year => (
+                <option key={year} value={year}>{year}</option>
               ))}
             </select>
           </div>

@@ -2,7 +2,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   Home, 
   Upload,
-  Settings
+  Settings,
+  List
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -10,6 +11,7 @@ const Sidebar = () => {
   
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: Home },
+    { path: '/transactions', label: 'Transactions', icon: List },
     { path: '/import', label: 'Import', icon: Upload },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
